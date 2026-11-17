@@ -20,5 +20,3 @@ PDF 提取、排版和文件保存都在本机进行。生成译文时，选中�
 ## 开发
 
 在仓库根目录运行 `powershell -ExecutionPolicy Bypass -File work/build.ps1` 打包，产物写入 `outputs/`。运行脚本测试前执行 `npm ci --prefix work/build`。架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，第三方组件与许可证见 [THIRD_PARTY.md](work/addon/THIRD_PARTY.md)。
-
-反馈排版问题时，请附上 Zotero 版本、插件版本、出错页码和可分享的最小复现文件。避免提交 API Key、含个人信息的日志或无权公开的文献。
