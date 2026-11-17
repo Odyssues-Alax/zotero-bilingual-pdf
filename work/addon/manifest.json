@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "双语 PDF 对照",
+  "version": "1.2.14",
+  "description": "在 Zotero 中生成、保存中文 PDF，与英文原版同步对照阅读。",
+  "author": "Local Research Tools",
+  "applications": {
+    "zotero": {
+      "id": "bilingual-pdf@local.test",
+      "update_url": "https://raw.githubusercontent.com/Odyssues-Alax/zotero-bilingual-pdf/main/updates.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "10.0.*"
+    }
+  },
+  "homepage_url": "https://github.com/Odyssues-Alax/zotero-bilingual-pdf"
+}

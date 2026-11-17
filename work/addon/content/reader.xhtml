@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN">
+<head><meta charset="UTF-8"/><title>双语 PDF 对照</title>
+<link rel="stylesheet" href="reader.css"/>
+<script src="vendor/pdf-lib.min.js"></script><script src="vendor/fontkit.umd.min.js"></script>
+<script type="module" src="reader.mjs"></script></head>
+<body>
+<header>
+  <div class="brand"><span class="logo">译</span><strong>双语 PDF 对照</strong><span id="document-title"></span></div>
+  <nav>
+    <button id="generate" class="primary" disabled="disabled">生成中文 PDF</button>
+    <button id="cancel" hidden="hidden">取消</button>
+    <button id="issues" disabled="disabled">问题列表</button>
+    <button id="quality" type="button">检查结果</button><button id="structure" disabled="disabled">结构检查</button>
+    <button id="regions" disabled="disabled">检查段落</button>
+    <button id="open-folder" disabled="disabled">显示译版文件</button>
+    <button id="native" disabled="disabled">在 Zotero 中标注原文</button>
+    <button id="settings">设置</button>
+  </nav>
+</header>
+<div class="toolbar">
+  <label>页码 <input id="page-number" type="number" min="1" value="1"/></label><span id="page-count">/ —</span>
+  <button id="previous" title="上一页">↑</button><button id="next" title="下一页">↓</button>
+  <button id="pan-tool" aria-pressed="false" title="拖动页面；也可按住空格临时拖动">☞ 拖动</button>
+  <button id="zoom-out" title="缩小（Ctrl+−）" aria-label="缩小 PDF">−</button>
+  <label>缩放 <input id="zoom" type="hidden" value="fit"/><input id="zoom-percent" type="number" min="25" max="300" step="5" value="100" aria-label="PDF 缩放百分比"/>%</label>
+  <button id="zoom-in" title="放大（Ctrl+＋）" aria-label="放大 PDF">＋</button><button id="zoom-fit" title="适合双栏（Ctrl+0）">适合双栏</button>
+  <button id="region-overlay" aria-pressed="false" title="显示原文识别区域及段落连接，帮助定位错栏">识别区域</button>
+  <span class="divider"></span>
+  <input id="search-side" type="hidden" value="zh"/><div class="search-sides" role="group" aria-label="搜索范围"><button id="search-zh" aria-pressed="true">中文</button><button id="search-en" aria-pressed="false">英文</button></div>
+  <input id="search-text" type="search" placeholder="输入词语，按回车查找"/><button id="search">查找</button><span id="search-count"></span>
+</div>
+<div id="status" role="status" aria-live="polite">正在打开…</div>
+<div id="recovery" hidden="hidden"><button id="edit-layout">修改问题段落</button><button id="skip-layout">保留问题段落原文并继续</button></div>
+<div class="columns"><span>英文原版</span><span id="translation-label">中文译版 · 可选择、搜索和复制文字</span></div>
+<main id="viewport"><div id="empty">选中文献或 PDF 附件，右键选择“中英 PDF 对照…”即可打开。</div><div id="pages"></div></main>
+<dialog id="settings-dialog">
+ <form id="settings-form"><h2>翻译设置</h2>
+ <p>手动生成时，所选段落的文字将发送到下面的 API 服务。原 PDF 文件不会上传。</p>
+ <fieldset><legend>PDF 处理</legend><label class="check"><input id="native-engine" type="checkbox" checked="checked"/>使用本机版面识别引擎（推荐）</label><p id="engine-status" role="status">正在检查…</p><button id="install-engine" type="button">安装／修复本机引擎</button><p class="hint">首次需下载运行环境和版面模型。由插件自动调用，翻译继续使用下方 API。取消勾选可使用旧引擎；重新打开论文后生效。</p></fieldset>
+ <label>API 地址<input id="base-url" type="url" required="required"/></label>
+ <label>模型<input id="model" required="required" placeholder="deepseek-flash"/></label>
+ <label>API Key<input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="只在本机保存"/></label>
+ <label class="check"><input id="structure-assist" type="checkbox" checked="checked"/>生成时用 DeepSeek 判断不确定的段落连接（只发送相关文字和区域信息）</label>
+ <label class="check"><input id="remember" type="checkbox" checked="checked"/>保存在本机凭据库</label>
+ <label>译版保存文件夹<div class="inline"><input id="output-dir" required="required"/><button id="choose-dir" type="button">选择…</button></div></label>
+ <p class="hint">中文 PDF 和断点缓存保存在此处。个人文库内自动创建关联附件；链接文件不会由 Zotero 自动同步。</p>
+ <div class="actions"><button type="button" id="close-settings">关闭</button><button class="primary" type="submit">保存设置</button></div>
+ </form>
+</dialog>
+<dialog id="regions-dialog">
+ <div class="dialog-heading"><h2>检查段落</h2><button id="close-regions">完成</button></div>
+ <p>勾选要翻译的段落。图注默认翻译，参考文献固定保留原文。公式、图内标签和表格默认保留原样。跨页续段会结合完整上下文翻译。生成后可在这里调整译文，再次生成无需重新翻译已完成段落。</p>
+ <div class="region-controls">
+   <label>查看第 <input id="region-page" type="number" min="1" value="1"/> <span id="region-page-count"></span> 页</label>
+   <button id="region-previous" type="button">上一页</button><button id="region-next" type="button">下一页</button>
+ </div>
+ <p id="region-issue" class="region-issue" hidden="hidden"></p>
+ <div id="region-list"></div>
+</dialog>
+<dialog id="issues-dialog">
+ <div class="dialog-heading"><h2>问题列表</h2><button id="close-issues" type="button">关闭</button></div>
+ <p id="issues-summary"></p>
+ <p class="hint">优先复用有效草稿，科研缩写和化学式允许保留。只有缺失或不合格的完整段落才补译；相同内容的失败不会反复请求。排版失败显示中文诊断图，未通过检查不能应用。自动翻译每个完整段落最多尝试两次，重开窗口仍保留次数。主动重新尝试可能产生 API 费用；排版问题不会通过重复翻译解决。有效译文会保存；已有的正式译版不会被失败结果覆盖。</p>
+ <div class="repair-actions"><button id="auto-repair" class="primary" type="button">一键修复可自动处理项</button><button id="read-completed" type="button">先阅读已完成内容</button></div>
+  <div id="issues-list"></div>
+ <div class="actions issue-actions"><button id="supplement-font" type="button">添加本机补充字体…</button><button id="retry-issues" type="button">重新尝试待处理翻译</button><button id="recheck-issues" type="button">继续生成／重新检查</button><button id="keep-issues" type="button">问题段落保留原文，生成待完成译版</button></div>
+</dialog>
+<dialog id="preview-dialog">
+ <div class="dialog-heading"><h2 id="preview-title">局部排版预览</h2><button id="close-preview" type="button">关闭</button></div>
+ <p class="hint">中文：宋体；英文、希腊字母和数字：Times New Roman；缺字使用本机后备字体。只调整当前段落，不改变图表和公式。</p>
+ <div class="preview-controls"><label>字号（pt，留空自动）<input id="preview-size" type="number" min="5.5" max="24" step="0.25"/></label><label>行距（倍数，留空自动）<input id="preview-leading" type="number" min="1.05" max="2" step="0.01"/></label><button id="preview-auto" type="button">恢复自动拟合</button></div>
+ <p id="preview-feedback" role="status" aria-live="polite"></p>
+ <div id="preview-texts" class="full-draft-preview" hidden="hidden"><section><h3>完整原文</h3><pre id="preview-full-source"></pre></section><section><h3>完整译文草稿</h3><pre id="preview-full-draft"></pre></section></div>
+ <div class="preview-pages"><section><h3>原文与识别区域</h3><div><canvas id="preview-source"></canvas></div></section><section><h3>中文排版预览</h3><div><canvas id="preview-result"></canvas></div></section></div>
+ <div class="actions"><button id="preview-apply" class="primary" type="button" disabled="disabled">应用译文和排版设置</button></div>
+</dialog>
+<dialog id="structure-dialog"><div class="dialog-heading"><h2>页面结构检查</h2><button id="close-structure" type="button">关闭</button></div><p id="structure-summary"></p><p class="hint">确定的连接自动处理；不确定项可在这里确认，或在生成时由模型辅助判断。人工确认优先保留。不会让模型修改原文、坐标、公式或参考文献。</p><div id="structure-list"></div><div class="actions"><button id="reanalyze-structure" type="button">重新分析待确认结构</button></div></dialog>
+<dialog id="quality-dialog"><div class="dialog-heading"><h2>排版检查结果</h2><button id="close-quality" type="button">关闭</button></div><div id="quality-list"></div></dialog>
+</body></html>

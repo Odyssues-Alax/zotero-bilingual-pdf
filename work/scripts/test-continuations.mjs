@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {buildStructure,edgeStamp} from '../addon/content/structure.mjs';
+import {logicalJobs,splitLogical,translateLogical} from '../addon/content/flow.mjs';
+import {translate,validateParagraph,fragmentTranslation} from '../addon/content/core.mjs';
+import {orbitalLabels} from '../addon/content/symbols.mjs';
+import {recovery,canAttempt,reserveAttempt} from '../addon/content/issues.mjs';
+import {translationCurrent} from '../addon/content/document.mjs';
+const tests=[],test=async(name,fn)=>{await fn();tests.push(name);};
+const b=(id,text,y=100,extra={})=>({id,text,y,x:50,w:500,h:12,fs:10,page:1,math:{},selected:true,reason:'',kind:'图表标题',lines:[],modelRegion:{id:'r',role:'figure_caption',confidence:.96},...extra});
+const page=blocks=>({number:1,width:600,height:800,blocks});
+await test('adjacent same-region caption gets whole context without changing geometry',()=>{
+ const a=b('a','XPS spectra of Bi 4f and Re 4f of the samples and'),z=b('z','heterostructure, respectively.',114);
+ const before=JSON.stringify([a,z].map(v=>[v.x,v.y,v.w,v.h]));buildStructure([page([a,z])]);
+ assert.equal(a.paragraphID,z.paragraphID);assert.equal(JSON.stringify([a,z].map(v=>[v.x,v.y,v.w,v.h])),before);
+ const j=logicalJobs([a,z])[0];assert(j.text.includes('and heterostructure'));assert(!translationCurrent(z,{source:z.text,text:'分别为异质结构。'}));
+});
+await test('same-region second numbered caption stays independent',()=>{const a=b('a','Figure 1. Some text and'),z=b('z','Figure 2. Other text.',114);buildStructure([page([a,z])]);assert.notEqual(a.paragraphID,z.paragraphID);});
+await test('different model boxes cannot be joined as caption',()=>{const a=b('a','The figure and'),z=b('z','the next caption.',114,{modelRegion:{id:'r2',role:'figure_caption',confidence:.96}});buildStructure([page([a,z])]);assert.notEqual(a.paragraphID,z.paragraphID);});
+await test('side by side caption boxes do not bridge the gutter',()=>{const a=b('a','A caption and',100,{w:200}),z=b('z','another caption.',100,{x:320,w:200});buildStructure([page([a,z])]);assert.notEqual(a.paragraphID,z.paragraphID);});
+await test('retained fragment blocks caption joining',()=>{const a=b('a','A caption and'),mid=b('m','retained text',114,{selected:false}),z=b('z','another fragment.',128);buildStructure([page([a,mid,z])]);assert.notEqual(a.paragraphID,z.paragraphID);});
+await test('manual separation survives caption detection',()=>{const a=b('a','A caption and'),z=b('z','its continuation.',114);buildStructure([page([a,z])],{links:{'a->z':{stamp:edgeStamp(a,z),join:false,origin:'manual'}}});assert.notEqual(a.paragraphID,z.paragraphID);});
+await test('large gap and different font keep captions separate',()=>{for(const extra of [{fs:5},{y:170}]){const a=b('a','A caption and'),z=b('z','another fragment.',114,extra);buildStructure([page([a,z])]);assert.notEqual(a.paragraphID,z.paragraphID);}});
+await test('orbital label reports element and orbital, not isolated number',()=>{const a=b('a','XPS spectra of Bi 4f and Re 4f.');assert.throws(()=>validateParagraph(a,'XPS光谱。'),e=>e.message.includes('Bi 4f')&&e.message.includes('Re 4f')&&e.evidence.differences.every(d=>d.kind==='orbital'));});
+await test('intact orbital labels and scientific abbreviations pass',()=>{validateParagraph(b('a','XPS spectra of Bi 4f and Re 4f.'),'Bi 4f与Re 4f的XPS光谱。');});
+await test('orbital labels allow spacing and spin-orbit suffix',()=>assert.deepEqual(orbitalLabels('Bi4f7/2, Re 4f5/2 and Cu 2p3/2'),['Bi 4f7/2','Re 4f5/2','Cu 2p3/2']));
+await test('ordinary measurements and invalid element codes not orbitals',()=>assert.deepEqual(orbitalLabels('5 mA, 4 s, 6 nm, Ab 4f and Bi 2f'),[]));
+const parts=[b('a','The orthorhombic Bi⟦M1⟧S⟦M2⟧ is deposited onto triclinic',700,{paragraphID:'a',column:0,math:{'⟦M1⟧':{text:'2'},'⟦M2⟧':{text:'3'}}}),b('z','ReS⟦M1⟧ to form the junction.',40,{paragraphID:'a',column:1,math:{'⟦M1⟧':{text:'2'}}})];
+const job=logicalJobs(parts)[0],bad='沉积在三斜相ReS⟦M3⟧上的正交相Bi⟦M1⟧S⟦M2⟧形成结。';
+const entry={id:job.id,fragments:[{id:'a',text:'正交相Bi⟦M1⟧S⟦M2⟧沉积在三斜相'},{id:'z',text:'ReS⟦M3⟧上以形成结。'}]};
+await test('natural Chinese crossing owners is detected before rendering',()=>assert.throws(()=>validateParagraph(job,bad),e=>e.fragmentOrder&&e.code==='translation_math'));
+await test('source anchored repair preserves material relation and local tokens',()=>{const v=fragmentTranslation(job,entry),split=splitLogical(job,v);assert(split.a.includes('Bi⟦M1⟧S⟦M2⟧'));assert(split.z.includes('ReS⟦M1⟧'));assert(v.includes('沉积在三斜相 ReS'));});
+await test('fragment IDs/count, ownership, omissions and extra tokens remain strict',()=>{for(const fragments of [[entry.fragments[0]], [entry.fragments[0],entry.fragments[0]], [{id:'invented',text:entry.fragments[0].text},entry.fragments[1]], [{id:'a',text:'正交相Bi⟦M1⟧S⟦M2⟧在ReS⟦M3⟧上'},{id:'z',text:'形成结。'}], [{id:'a',text:'正交相BiS沉积在三斜相'},entry.fragments[1]]])assert.throws(()=>fragmentTranslation(job,{fragments}));});
+await test('wrong numbers and missing minus cannot pass fragment recovery',()=>{const p=parts.map(x=>({...x}));p[0].text+=' at -0.67 V';const j=logicalJobs(p)[0];assert.throws(()=>fragmentTranslation(j,{...entry,id:j.id,fragments:[{...entry.fragments[0],text:entry.fragments[0].text+'在0.67 V'},entry.fragments[1]]}),e=>e.code==='translation_science');});
+await test('HTTP retry changes strategy, bounded to two requests and persists budget',async()=>{
+ let count=0;const cache={},store=recovery(cache);const policy={canAttempt:j=>canAttempt(store,j),beforeRequest:async js=>{for(const j of js)assert(reserveAttempt(store,j));}};
+ const fetcher=async(_url,options)=>{count++;const body=JSON.parse(options.body),p=JSON.parse(body.messages[1].content).paragraphs[0];if(count===2){assert(p.returnFragments);assert(p.repair.previousTranslation===bad);assert(body.messages[0].content.includes('A沉积在B上'));}return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({translations:[count===1?{id:job.id,text:bad}:entry]})}}]}));};
+ const out=await translate([job],{baseURL:'https://fixture.invalid',model:'fixture'},'',undefined,fetcher,policy);assert.equal(count,2);splitLogical(job,out[job.id]);assert(!canAttempt(store,job));
+});
+await test('failed structured recovery retains new draft and valid siblings',async()=>{
+ const plain=b('plain','Another paragraph.');let count=0;
+ const fetcher=async()=>{count++;const translations=count===1?[{id:job.id,text:bad},{id:plain.id,text:'另一段。'}]:[{id:job.id,fragments:[entry.fragments[0],{id:'z',text:'ReS⟦M3⟧和未知⟦M99⟧。'}]}];return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({translations})}}]}));};
+ await assert.rejects(translateLogical([...parts,plain],{baseURL:'https://fixture.invalid',model:'fixture'},'',undefined,(jobs,s,k,a,_f,p)=>translate(jobs,s,k,a,fetcher,p)),e=>{assert.equal(e.partial.plain,'另一段。');assert(e.paragraphDrafts[job.id].text.includes('M99'));return true;});assert.equal(count,2);
+});
+console.log(JSON.stringify({passed:tests.length,tests}));

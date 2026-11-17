@@ -1,0 +1,13 @@
+# Personal and generated files
+/outputs/
+/work/qa-*
+/work/build/node_modules/
+/work/addon/engine-runtime/
+.env
+.env.*
+*.xpi
+*.pdf
+*.sqlite
+*.sqlite-*
+__pycache__/
+*.pyc

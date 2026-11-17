@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import {validateParagraph} from "../addon/content/core.mjs";
+import {recoverDrafts,repairStamp} from "../addon/content/repair.mjs";
+import {logicalJobs} from "../addon/content/flow.mjs";
+import {recovery} from "../addon/content/issues.mjs";
+const tests=[],check=(name,fn)=>{fn();tests.push(name);};
+const block=(id,text)=>({id,text,math:{},selected:true,page:1,paragraphSource:null});
+check("源文科研逻辑门不误报",()=>assert.equal(validateParagraph(block("a","XOR and AND gates"),"构建XOR和AND逻辑门。"),"构建XOR和AND逻辑门。"));
+check("纯材料标题可保持化学式",()=>assert.equal(validateParagraph(block("a","3.1. AlGaN"),"3.1. AlGaN"),"3.1. AlGaN"));
+check("科研缩写不掩盖漏译句子",()=>assert.throws(()=>validateParagraph(block("a","UV devices"),"UV器件 ground radiation from the sun or other")));
+check("大写完整句仍拦截",()=>assert.throws(()=>validateParagraph(block("a","THE DEVICE IS MADE OF SILICON"),"器件 THE DEVICE IS MADE OF SILICON")));
+check("普通连接词and仍拦截",()=>assert.throws(()=>validateParagraph(block("a","UV and light"),"UV and 光照。")));
+check("全段草稿原子恢复",()=>{
+ const a=block("p1b1","XOR logic gates and AND gates"),b=block("p2b1","These gates are useful.");a.paragraphID=b.paragraphID="p1b1";a.paragraphSource=b.paragraphSource="complete source";
+ const pages=[{blocks:[a,b]}],job=logicalJobs([a,b])[0],cache={translations:{},drafts:{},paragraphDrafts:{[job.id]:{source:job.text,text:"研究人员构建XOR和AND逻辑门。这些逻辑门具有应用价值。"}}};
+ assert.equal(recoverDrafts(pages,cache).length,2);assert.equal(Object.keys(cache.translations).length,2);assert(!cache.paragraphDrafts[job.id]);
+});
+check("上下文变化不采用旧草稿",()=>{const a=block("p1b1","updated source");const c={translations:{},drafts:{p1b1:{source:"old source",text:"旧译文"}}};assert.equal(recoverDrafts([{blocks:[a]}],c).length,0);});
+check("有效人工修改不覆盖",()=>{const a=block("p1b1","source text");const c={translations:{p1b1:{source:a.text,text:"人工修改",manual:true}},drafts:{p1b1:{source:a.text,text:"自动草稿"}}};recoverDrafts([{blocks:[a]}],c);assert.equal(c.translations.p1b1.text,"人工修改");});
+check("重复修复指纹稳定但译文修改后更新",()=>{const a=block("p1b1","source text"),p=[{blocks:[a]}],c={translations:{},drafts:{}};recovery(c);const first=repairStamp(p,c);assert.equal(first,repairStamp(p,c));c.drafts.p1b1={source:a.text,text:"新草稿"};assert.notEqual(first,repairStamp(p,c));});
+check("新发现的结构问题必须使旧修复指纹失效",()=>{const p=[{blocks:[]}],c={translations:{},drafts:{}};recovery(c);p.structure={candidates:[],uncertainNodes:[]};const first=repairStamp(p,c);p.structure.uncertainNodes.push({id:"p1b1",stamp:"new-source"});assert.notEqual(first,repairStamp(p,c));});
+console.log(JSON.stringify({passed:tests.length,tests}));

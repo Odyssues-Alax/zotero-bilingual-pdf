@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const css=await readFile(new URL('../addon/content/reader.css',import.meta.url),'utf8');
+const pdfjs=await readFile(new URL('../addon/content/vendor/pdf.mjs',import.meta.url),'utf8');
+const rule=css.match(/\.hiddenCanvasElement\s*\{([^}]+)\}/)?.[1];
+assert(pdfjs.includes('canvas.className = "hiddenCanvasElement"'),'PDF.js helper contract changed; review viewer integration');
+assert(rule,'Font-measurement canvas must have its viewer CSS');
+const properties=Object.fromEntries(rule.split(';').filter(Boolean).map(x=>x.split(':').map(v=>v.trim())));
+assert.equal(properties.visibility,'hidden');
+assert.equal(properties.position,'absolute');
+assert.equal(properties['pointer-events'],'none');
+assert.equal(properties.top,'0');assert.equal(properties.left,'0');
+console.log(JSON.stringify({passed:7,scope:'PDF.js font-measurement canvas CSS contract'}));
